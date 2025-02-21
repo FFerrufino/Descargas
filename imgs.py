@@ -76,4 +76,5 @@ def descargar_imagenes():
     return send_file(zip_buffer, as_attachment=True, download_name=resultado["nombre_archivo"]+".zip", mimetype="application/zip")
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5004)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(debug=False, host="0.0.0.0", port=port)
