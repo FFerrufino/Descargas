@@ -1,9 +1,11 @@
 from flask import Flask, request, send_file, jsonify
 import requests
-import zipfile
 import io
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, unquote
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from PIL import Image
 
 app = Flask(__name__)
 
@@ -43,7 +45,12 @@ def descargar_imagenes_flipbook(url_pagina):
 
             img_response = requests.get(img_url, headers=headers)
             if img_response.status_code == 200:
-                imagenes_descargadas.append((f"imagen_{idx}.jpg", img_response.content))
+                imagen_bytes = io.BytesIO(img_response.content)
+                try:
+                    img_obj = Image.open(imagen_bytes).convert("RGB")
+                    imagenes_descargadas.append((f"imagen_{idx}.png", img_obj))
+                except Exception as e:
+                    print(f"Error procesando la imagen {img_url}: {e}")
             else:
                 print(f"No se pudo descargar {img_url}")
 
@@ -56,7 +63,7 @@ def descargar_imagenes_flipbook(url_pagina):
         return {"error": str(e)}
 
 @app.route('/descargar-imagenes', methods=['GET'])
-def descargar_imagenes():
+def descargar_pdf():
     url = request.args.get('url')
     if not url:
         return jsonify({"error": "Falta el parámetro 'url'"}), 400
@@ -66,14 +73,39 @@ def descargar_imagenes():
     if "error" in resultado:
         return jsonify(resultado), 400
 
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for nombre, contenido in resultado["imagenes_descargadas"]:
-            zipf.writestr(nombre, contenido)
+    pdf_buffer = io.BytesIO()
+    c = canvas.Canvas(pdf_buffer, pagesize=letter)
+    width, height = letter
 
-    zip_buffer.seek(0)
-    
-    return send_file(zip_buffer, as_attachment=True, download_name=resultado["nombre_archivo"]+".zip", mimetype="application/zip")
+    for nombre, img_obj in resultado["imagenes_descargadas"]:
+        try:
+            img_width, img_height = img_obj.size
+
+            scale_factor = min(width / img_width, height / img_height)
+            new_width = img_width * scale_factor
+            new_height = img_height * scale_factor
+
+            x_position = (width - new_width) / 2
+            y_position = (height - new_height) / 2
+
+            temp_img_buffer = io.BytesIO()
+            img_obj.save(temp_img_buffer, format="PNG")
+            temp_img_buffer.seek(0)
+
+            temp_filename = f"temp_{nombre}.png"
+            img_obj.save(temp_filename, "PNG")
+
+            c.drawImage(temp_filename, x_position, y_position, new_width, new_height, preserveAspectRatio=True, mask='auto')
+            c.showPage()
+
+        except Exception as e:
+            print(f"Error procesando la imagen {nombre}: {e}")
+
+    c.save()
+    pdf_buffer.seek(0)
+
+    return send_file(pdf_buffer, as_attachment=True, download_name=resultado["nombre_archivo"]+".pdf", mimetype="application/pdf")
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
