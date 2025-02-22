@@ -4,3 +4,4 @@ beautifulsoup4
 pillow
 reportlab
 gunicorn
+concurrent.futures
