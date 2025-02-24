@@ -3,6 +3,7 @@ import requests
 import io
 import os
 import concurrent.futures
+import zipfile
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, unquote
 from reportlab.pdfgen import canvas
